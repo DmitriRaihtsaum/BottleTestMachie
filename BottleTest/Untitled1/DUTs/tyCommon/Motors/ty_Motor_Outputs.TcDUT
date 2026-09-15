@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ty_Motor_Outputs" Id="{c0a5b483-ebdf-4182-9b7b-b0e1d73e8f09}">
+    <Declaration><![CDATA[TYPE ty_Motor_Outputs :
+STRUCT
+    // Physical Output (Выход на реле/контактор)
+    b_Activate_Contactor             : BOOL;
+    
+    // Status Flags
+    b_Motor_IsRunning                : BOOL;
+    b_MotorError                     : BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

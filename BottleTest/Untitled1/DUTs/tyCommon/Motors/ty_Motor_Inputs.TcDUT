@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ty_Motor_Inputs" Id="{ff5b36ff-5fb3-48be-9293-9d5d68497cd5}">
+    <Declaration><![CDATA[TYPE ty_Motor_Inputs :
+STRUCT
+    bTestMode                        : BOOL;
+    bManualMode                      : BOOL;
+    
+    // Command (Auto)
+    b_Reqest_SwitchOnMotor           : BOOL;
+    
+    // HMI (Manual)
+    bHmi_Manual_MotorSwitchReqest    : BOOL;
+    
+    // Physical Feedback (Блок-контакт контактора)
+    bS_Feedback_MotorIsRunning       : BOOL;
+    
+    // Settings
+    t_FeedbackDelay                  : TIME := T#300MS;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

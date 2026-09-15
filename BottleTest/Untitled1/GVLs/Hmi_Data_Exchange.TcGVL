@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <GVL Name="Hmi_Data_Exchange" Id="{adbafb1f-91db-4ab7-946f-2c5d6eed8745}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+// -----------------------------------------------------------------------------
+//	1. System & Test Mode
+// -----------------------------------------------------------------------------	
+bTestMode 						:BOOL;
+// -----------------------------------------------------------------------------
+//	2.Hmi Commands (Buttons)
+// -----------------------------------------------------------------------------
+bHmiControlOn 					:BOOL;
+bHmiControlOFF 					:BOOL;
+
+// -----------------------------------------------------------------------------
+//	3. Visu Sensors & Inputs 
+// -----------------------------------------------------------------------------
+bInfeedCylinderProductVisible	:BOOL;
+bTesterProductVisible 		  	:BOOL;
+bKickerProductVisible 		  	:BOOL;
+bBottleQualityOk	 		  	:BOOL;
+
+// -----------------------------------------------------------------------------
+//	4. Machine State
+// -----------------------------------------------------------------------------
+eCurrentStep : tyConveyorModeControl:= tyConveyorModeControl.Standby;
+
+// -----------------------------------------------------------------------------
+//5. Cylinders & Actuators Feedback (Outputs)
+// -----------------------------------------------------------------------------
+bInfeedCylinderExtend  : BOOL; 
+bInfeedCylinderRetract : BOOL; 
+
+bTesterStopperCylinderExtend  : BOOL; 
+bTesterStopperCylinderRetract : BOOL; 
+
+bTesterHeadCylinderExtend  : BOOL; 
+bTesterHeadCylinderRetract : BOOL; 
+
+bKickerCylinderExtend  : BOOL; 
+bKickerCylinderRetract : BOOL; 
+
+bConveyorIsRunning 		:BOOL; 
+bAirTestPressureValve 	:BOOL; 
+
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

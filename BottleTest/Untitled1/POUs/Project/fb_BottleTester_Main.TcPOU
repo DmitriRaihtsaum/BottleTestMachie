@@ -1,0 +1,293 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="fb_BottleTester_Main" Id="{5a77b619-8e8f-42f0-8aab-d83d94d87ed7}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK fb_BottleTester_Main
+VAR_INPUT
+    bPressureInput_Di                    : BOOL; 
+    bCylinder1_ProductOnTheInputStopper  : BOOL;
+    bCylinder_ProductOnTheTestStopper    : BOOL;
+    bStartPushButton                     : BOOL;
+    bStopPushButton                      : BOOL;
+    StopperBottleCloseDelay              : TIME := T#2S;
+    TestStabilizationTime                : TIME;
+    TestBlowTime                         : TIME;
+	TesterCylinderExtendTime			 : TIME;
+    KickerBottleSensor                   : BOOL;
+END_VAR
+
+VAR_OUTPUT
+    bPressureValveOut                    : BOOL;
+
+END_VAR
+
+VAR
+    eCurrentStep                         : tyConveyorModeControl := tyConveyorModeControl.StandBy;
+    eNextStep                            : tyConveyorModeControl := tyConveyorModeControl.StandBy;
+    ePrevStep                            : tyConveyorModeControl := tyConveyorModeControl.StandBy;
+    
+    fbCylinder_InfeedStopper             : Fb_CylinderDualAction_5_3;
+    fbCylinder_TestStopper               : Fb_CylinderDualAction_5_3;
+    fbCylinder_Kicker                    : Fb_CylinderDualAction_5_3;
+    fbCylinder_Tester                    : Fb_CylinderDualAction_5_3;
+    fbMotor_Conveyor                     : Fb_Motor_Contactor;
+    
+    fbStepTimer1                         : TON;
+	fbStepTimer2  						: TON;	
+    fbBottleKickPulse                    : TP;
+    
+    bIsRunning                           : BOOL; 
+    bKickOutFlag                         : BOOL;
+    bStepInit                            : BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[//=============================================================================
+// Dmitri Raihtsaum - Copyright 2026
+// Created By:     Dmitri Raihtsaum
+//-----------------------------------------------------------------------------
+// Tested with:    TwinCAT 3
+// Engineering:    TwinCAT 3
+// Functionality:  BottleTestMachine
+// Date:           15.09.2026
+// Rev:            0.1
+//=============================================================================
+
+// -----------------------------------------------------------------------------
+// 1. Input & Hmi paiing  (Read at cycle start )
+// -----------------------------------------------------------------------------
+bStartPushButton := Hmi_Data_Exchange.bHmiControlOn;
+bStopPushButton := Hmi_Data_Exchange.bHmiControlOFF;
+
+bCylinder1_ProductOnTheInputStopper := Hmi_Data_Exchange.bInfeedCylinderProductVisible;
+bCylinder_ProductOnTheTestStopper := Hmi_Data_Exchange.bTesterProductVisible;
+KickerBottleSensor := Hmi_Data_Exchange.bKickerProductVisible;
+
+// -----------------------------------------------------------------------------
+// 2. Control logic (Start/Stop)
+// -----------------------------------------------------------------------------
+IF bStartPushButton THEN 
+	bIsRunning :=TRUE; 	
+END_IF
+
+IF bStopPushButton THEN 
+	bIsRunning :=FALSE; 	
+END_IF
+
+IF NOT bIsRunning THEN 
+	eCurrentStep := tyConveyorModeControl.Standby;
+	eNextStep 	:= tyConveyorModeControl.Standby;
+END_IF
+
+// -----------------------------------------------------------------------------
+//3. State Machine 
+// -----------------------------------------------------------------------------
+CASE eCurrentStep OF 	
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.Standby: 
+// -----------------------------------------------------------------------------
+
+	fbStepTimer1(IN:=FALSE,PT:=T#0MS);
+	fbCylinder_InfeedStopper.Extend();
+	fbCylinder_Tester.Retract();
+	fbCylinder_Kicker.Stop();
+	fbCylinder_TestStopper.Stop();
+	bPressureValveOut :=FALSE;
+	fbMotor_Conveyor.Stop();
+	bKickOutFlag :=FALSE;
+IF bIsRunning THEN 
+eNextStep :=tyConveyorModeControl.WaitForBottle;
+END_IF;
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.WaitForBottle: 
+// -----------------------------------------------------------------------------
+IF ePrevStep <> eCurrentStep THEN 
+fbStepTimer1(IN:=FALSE,PT:=T#0MS);
+fbCylinder_InfeedStopper.Extend();
+fbCylinder_Tester.Retract();
+fbMotor_Conveyor.START();
+ELSE
+IF bCylinder1_ProductOnTheInputStopper THEN 
+	eNextStep :=tyConveyorModeControl.OpenInfeedStopper;
+END_IF;
+END_IF;
+
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.OpenInfeedStopper:
+// -----------------------------------------------------------------------------
+IF ePrevStep <> eCurrentStep THEN 
+fbStepTimer1(IN:=FALSE,PT:=T#0MS);	
+fbCylinder_InfeedStopper.Retract();
+ELSE 
+	fbStepTimer1(IN:=TRUE ,PT:=StopperBottleCloseDelay);
+IF fbStepTimer1.Q THEN 
+eNextStep :=tyConveyorModeControl.MoveToTestStation;		
+END_IF
+END_IF
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.MoveToTestStation: 
+// -----------------------------------------------------------------------------
+IF ePrevStep <> eCurrentStep THEN 
+fbStepTimer1(IN:=FALSE,PT:=T#0MS);
+fbCylinder_InfeedStopper.Extend();
+fbCylinder_TestStopper.Extend();
+fbCylinder_Tester.Retract();
+ELSE
+	fbStepTimer1(IN:=TRUE ,PT:=T#3S);
+IF bCylinder_ProductOnTheTestStopper AND fbStepTimer1.Q THEN 
+	eNextStep :=tyConveyorModeControl.ExtendTestHead;	
+END_IF
+END_IF
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.ExtendTestHead: 
+// -----------------------------------------------------------------------------
+IF ePrevStep <> eCurrentStep THEN 
+	fbStepTimer1(IN:=FALSE,PT:=T#0MS);
+	fbCylinder_Tester.Extend();	
+
+ELSE 
+	fbStepTimer1(IN:=TRUE ,PT:=T#3S);
+	IF fbCylinder_Tester.CylinderOutput.b_Cylinder_IsExtend AND fbStepTimer1.Q THEN 
+		eNextStep :=tyConveyorModeControl.InjectAir;	
+	END_IF
+
+END_IF
+
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.InjectAir: 
+// -----------------------------------------------------------------------------
+IF ePrevStep <> eCurrentStep THEN 
+	fbStepTimer1(IN:=FALSE,PT:=T#0MS);
+	bPressureValveOut :=TRUE; 
+	ELSE
+		fbStepTimer1(IN:=TRUE ,PT:=T#3S);
+		IF fbStepTimer1.Q THEN 
+		eNextStep :=tyConveyorModeControl.StabilizeAndMeasure;	
+	END_IF
+		END_IF
+
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.StabilizeAndMeasure: 
+// -----------------------------------------------------------------------------
+IF ePrevStep <> eCurrentStep THEN 
+	fbStepTimer1(IN:=FALSE,PT:=T#0MS);
+	bPressureValveOut :=FALSE; 
+ELSE 
+	fbStepTimer1(IN:=TRUE ,PT:=T#3S);
+	IF fbStepTimer1.Q THEN 		
+IF NOT bPressureInput_Di THEN 
+	bKickOutFlag :=TRUE; 
+	END_IF;
+	eNextStep :=tyConveyorModeControl.ReleaseTestHead;
+	END_IF
+END_IF
+
+
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.ReleaseTestHead :
+// -----------------------------------------------------------------------------
+IF ePrevStep <> eCurrentStep THEN 
+	fbStepTimer1(IN:=FALSE,PT:=T#0MS);
+	fbCylinder_Tester.Retract();
+	ELSE 
+		fbStepTimer1(IN:=TRUE ,PT:=T#3S);
+	IF fbStepTimer1.Q THEN 	
+	eNextStep :=tyConveyorModeControl.ReleaseBottle;
+		END_IF;
+		END_IF;
+
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.ReleaseBottle:
+// -----------------------------------------------------------------------------
+IF ePrevStep <> eCurrentStep THEN 
+fbCylinder_TestStopper.Retract();
+fbStepTimer1(IN:=FALSE,PT:=T#0MS);
+ELSE
+	IF bKickOutFlag THEN 
+		eNextStep := tyConveyorModeControl.RejectBottle;
+		
+		ELSE 
+			eNextStep :=tyConveyorModeControl.WaitForBottle;
+	END_IF;
+	END_IF;
+// -----------------------------------------------------------------------------
+tyConveyorModeControl.RejectBottle:
+// -----------------------------------------------------------------------------
+IF ePrevStep <> eCurrentStep THEN
+	fbStepTimer1(IN:=FALSE,PT:=T#0MS);
+	fbStepTimer2(IN:=FALSE,PT:=T#0MS);
+ELSE
+	IF KickerBottleSensor THEN 
+		fbStepTimer1(IN:=TRUE ,PT:=T#300MS);
+		IF fbStepTimer1.Q THEN 
+			fbCylinder_Kicker.Extend();
+		END_IF
+	END_IF
+fbStepTimer2(IN:=fbCylinder_Kicker.CylinderOutput.b_Cylinder_IsExtend ,PT:=T#2S);
+	IF   fbStepTimer2.q  THEN 
+		fbCylinder_Kicker.Retract();
+		bKickOutFlag :=FALSE; 
+		eNextStep :=tyConveyorModeControl.WaitForBottle;
+	END_IF
+END_IF;
+
+
+
+END_CASE
+
+// -----------------------------------------------------------------------------
+// 4. Step Transition
+// -----------------------------------------------------------------------------
+ePrevStep := eCurrentStep; 
+eCurrentStep := eNextStep;
+
+
+// -----------------------------------------------------------------------------
+//5. Hardware & Sub-Block Execution
+// -----------------------------------------------------------------------------
+//Update simulation mode fefoure FB Call
+fbCylinder_InfeedStopper.cylinderInput.bTestMode := Hmi_Data_Exchange.bTestMode;
+fbCylinder_TestStopper.cylinderInput.bTestMode := Hmi_Data_Exchange.bTestMode;
+fbCylinder_Kicker.cylinderInput.bTestMode:= Hmi_Data_Exchange.bTestMode;
+fbCylinder_Tester.cylinderInput.bTestMode:= Hmi_Data_Exchange.bTestMode;
+fbMotor_Conveyor.MotorInput.bTestMode := Hmi_Data_Exchange.bTestMode;
+
+//Call Hardware blocks
+fbCylinder_InfeedStopper();
+fbCylinder_TestStopper();
+fbCylinder_Kicker();
+fbCylinder_Tester();
+fbMotor_Conveyor();
+
+// -----------------------------------------------------------------------------
+//6. Output & Hmi Status Mapping
+// -----------------------------------------------------------------------------
+Hmi_Data_Exchange.eCurrentStep := eCurrentStep;
+Hmi_Data_Exchange.bAirTestPressureValve := bPressureValveOut;
+
+//Input mapping from GVL
+//bStartPushButton 					:= Hmi_Data_Exchange.bHmiControlOn;
+//bStopPushButton  					:= Hmi_Data_Exchange.bHmiControlOFF;
+//bCylinder1_ProductOnTheInputStopper := Hmi_Data_Exchange.bInfeedCylinderProductVisible;
+//bCylinder_ProductOnTheTestStopper 	:= Hmi_Data_Exchange.bTesterProductVisible;
+//KickerBottleSensor 					:= Hmi_Data_Exchange.bKickerProductVisible;
+bPressureInput_Di 					:= Hmi_Data_Exchange.bBottleQualityOk;
+
+//Visu /Hmi output mapping
+Hmi_Data_Exchange.bInfeedCylinderExtend 		:= fbCylinder_InfeedStopper.CylinderOutput.b_Cylinder_IsExtend;
+Hmi_Data_Exchange.bInfeedCylinderRetract 		:= fbCylinder_InfeedStopper.CylinderOutput.b_Cylinder_IsRetract;
+Hmi_Data_Exchange.bTesterStopperCylinderExtend	:= fbCylinder_TestStopper.CylinderOutput.b_Cylinder_IsExtend;
+Hmi_Data_Exchange.bTesterStopperCylinderRetract := fbCylinder_TestStopper.CylinderOutput.b_Cylinder_IsRetract;
+Hmi_Data_Exchange.bTesterHeadCylinderExtend 	:= fbCylinder_Tester.CylinderOutput.b_Cylinder_IsExtend;
+Hmi_Data_Exchange.bTesterHeadCylinderRetract 	:= fbCylinder_Tester.CylinderOutput.b_RetractValve;
+Hmi_Data_Exchange.bKickerCylinderExtend := fbCylinder_Kicker.CylinderOutput.b_Cylinder_IsExtend;
+Hmi_Data_Exchange.bKickerCylinderRetract:= fbCylinder_Kicker.CylinderOutput.b_Cylinder_IsRetract;
+
+Hmi_Data_Exchange.bConveyorIsRunning := fbMotor_Conveyor.MotorOutput.b_Motor_IsRunning;
+
+// -----------------------------------------------------------------------------
+// END
+// -----------------------------------------------------------------------------
+]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

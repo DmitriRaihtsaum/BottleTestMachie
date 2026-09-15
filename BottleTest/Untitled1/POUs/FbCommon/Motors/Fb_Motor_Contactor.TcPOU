@@ -1,0 +1,65 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="Fb_Motor_Contactor" Id="{d3eb5bf3-7888-4a22-9cd6-760f08c853f6}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK Fb_Motor_Contactor
+VAR_INPUT
+    MotorInput     : ty_Motor_Inputs;
+END_VAR
+VAR_OUTPUT
+    MotorOutput    : ty_Motor_Outputs;
+END_VAR
+VAR
+    fbSimTimer     : TON;
+    fbErrorTimer1  : TON; // Ошибка: Контактор не включился за 1 сек
+    fbErrorTimer2  : TON; // Ошибка: Залипание контактора (обратная связь есть при снятой команде)
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// -----------------------------------------------------------------------------
+// 1. Contactor Control (Man/Auto)
+// -----------------------------------------------------------------------------
+IF NOT MotorInput.bManualMode THEN 
+    MotorOutput.b_Activate_Contactor := MotorInput.b_Reqest_SwitchOnMotor;
+ELSE 
+    MotorOutput.b_Activate_Contactor := MotorInput.bHmi_Manual_MotorSwitchReqest;
+END_IF;
+
+// -----------------------------------------------------------------------------
+// 2. Feedback - contact ( Real + Sim) 
+// -----------------------------------------------------------------------------
+IF MotorInput.bTestMode THEN 
+    // Feedback Emulation
+    fbSimTimer(IN := MotorOutput.b_Activate_Contactor, PT := MotorInput.t_FeedbackDelay);
+    MotorOutput.b_Motor_IsRunning := fbSimTimer.Q;
+ELSE 
+    MotorOutput.b_Motor_IsRunning := MotorInput.bS_Feedback_MotorIsRunning;
+    fbSimTimer(IN := FALSE);
+END_IF;
+
+// -----------------------------------------------------------------------------
+// 3. Fault Control
+// -----------------------------------------------------------------------------
+fbErrorTimer1(IN := MotorOutput.b_Activate_Contactor AND NOT MotorOutput.b_Motor_IsRunning, PT := T#1S);
+fbErrorTimer2(IN := NOT MotorOutput.b_Activate_Contactor AND MotorOutput.b_Motor_IsRunning, PT := T#1S);
+
+MotorOutput.b_MotorError := fbErrorTimer1.Q OR fbErrorTimer2.Q;]]></ST>
+    </Implementation>
+    <Method Name="Start" Id="{0e172ff5-3aad-4dff-a0c2-359fd41e3a0a}">
+      <Declaration><![CDATA[METHOD Start : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[MotorInput.b_Reqest_SwitchOnMotor :=true; ]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Stop" Id="{517c9093-d9fe-4493-b830-ed63475345ee}">
+      <Declaration><![CDATA[METHOD Stop : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[MotorInput.b_Reqest_SwitchOnMotor :=False; ]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

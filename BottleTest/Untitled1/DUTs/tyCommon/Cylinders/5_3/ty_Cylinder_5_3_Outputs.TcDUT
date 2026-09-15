@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <DUT Name="ty_Cylinder_5_3_Outputs" Id="{1231640d-5825-4c60-8517-ffa8e5abc975}">
+    <Declaration><![CDATA[TYPE ty_Cylinder_5_3_Outputs :
+STRUCT
+    // Valve physical outputs
+    b_ExtendValve                : BOOL;
+    b_RetractValve               : BOOL;
+    
+    // Feedback status flags
+    b_Cylinder_IsExtend            : BOOL;
+    b_Cylinder_IsRetract             : BOOL;
+    b_ValveError                 : BOOL;
+END_STRUCT
+END_TYPE]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,88 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1">
+  <POU Name="Fb_CylinderDualAction_5_3" Id="{a4b29e54-5128-4ced-99c0-2adb465b2d09}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK Fb_CylinderDualAction_5_3
+VAR_INPUT
+    cylinderInput  : ty_Cylinder_5_3_Inputs;
+END_VAR
+VAR_OUTPUT
+    CylinderOutput : ty_Cylinder_5_3_Outputs ;
+END_VAR
+VAR
+    fbOpenTimer    : TON;
+    fbCloseTimer   : TON;
+    fbErrorTimer1  : TON;
+    fbErrorTimer2  : TON;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[
+// -----------------------------------------------------------------------------
+// 1.Solenoid Control (Auto/Man)
+// -----------------------------------------------------------------------------
+IF NOT cylinderInput.bManualMode THEN 
+    CylinderOutput.b_ExtendValve  := cylinderInput.b_Reqest_CylinderOut;
+    CylinderOutput.b_RetractValve := cylinderInput.b_Reqest_CylinderIn;
+ELSE 
+    CylinderOutput.b_ExtendValve  := cylinderInput.bHmi_Manual_Reqest_Out;
+    CylinderOutput.b_RetractValve := cylinderInput.bHmi_Manual_Reqest_In;
+END_IF;
+
+// -----------------------------------------------------------------------------
+// 2. Feedback (Real / Simulation, Testmode)
+// -----------------------------------------------------------------------------
+IF cylinderInput.bTestMode THEN 
+    // Limit Switch simulation
+    fbOpenTimer(IN := CylinderOutput.b_ExtendValve AND NOT CylinderOutput.b_RetractValve, PT := cylinderInput.t_FeedbackSensorDelay);
+    fbCloseTimer(IN := CylinderOutput.b_RetractValve AND NOT CylinderOutput.b_ExtendValve, PT := cylinderInput.t_FeedbackSensorDelay);
+    
+    CylinderOutput.b_Cylinder_IsExtend := fbOpenTimer.Q;
+    CylinderOutput.b_Cylinder_IsRetract  := fbCloseTimer.Q;
+ELSE 
+    // Limit switch real sensors read
+    CylinderOutput.b_Cylinder_IsExtend := cylinderInput.bS_Feedback_Sensor_IsOut;
+    CylinderOutput.b_Cylinder_IsRetract := cylinderInput.bS_Feedback_Sensor_IsIn;
+    
+    fbOpenTimer(IN := FALSE);
+    fbCloseTimer(IN := FALSE);
+END_IF;
+
+// -----------------------------------------------------------------------------
+// 3. Fault Control 
+// -----------------------------------------------------------------------------
+fbErrorTimer1(IN := CylinderOutput.b_ExtendValve AND NOT CylinderOutput.b_Cylinder_IsExtend, PT := T#1S);
+fbErrorTimer2(IN := CylinderOutput.b_RetractValve AND NOT CylinderOutput.b_Cylinder_IsRetract, PT := T#1S);
+
+CylinderOutput.b_ValveError := fbErrorTimer1.Q OR fbErrorTimer2.Q;]]></ST>
+    </Implementation>
+    <Method Name="Extend" Id="{d6cec7d1-78d4-4b0e-95d9-296438b424e6}">
+      <Declaration><![CDATA[METHOD Extend : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[cylinderInput.b_Reqest_CylinderIn := FALSE;
+cylinderInput.b_Reqest_CylinderOut := TRUE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Retract" Id="{91ebe615-4c43-4443-bf17-7bb4b05dff0d}">
+      <Declaration><![CDATA[METHOD Retract : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[cylinderInput.b_Reqest_CylinderIn := TRUE;
+cylinderInput.b_Reqest_CylinderOut := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="Stop" Id="{029a51c9-8f8d-48ff-9f65-0530e5a74d4b}">
+      <Declaration><![CDATA[METHOD Stop : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[cylinderInput.b_Reqest_CylinderIn := FALSE;
+cylinderInput.b_Reqest_CylinderOut := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>
